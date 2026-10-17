@@ -1,0 +1,17 @@
+{
+  "name": "@spectrail/vocabulary",
+  "version": "0.1.0",
+  "description": "The project dictionary: approved terms, banned synonyms, and checks.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": ["src"],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "peerDependencies": {
+    "@spectrail/core": "^0.1.0"
+  }
+}

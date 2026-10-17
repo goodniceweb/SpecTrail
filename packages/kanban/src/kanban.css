@@ -1,0 +1,74 @@
+.st-kpage { max-width: 1600px; margin: 0 auto; padding: 32px 24px 64px; }
+.st-ktop { font-size: 28px; font-weight: 600; margin-bottom: 12px; }
+
+.st-kfilter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 20px; font-size: 13px; }
+.st-kfilter-label { color: var(--vp-c-text-2); margin-right: 4px; }
+.st-kfilter button {
+  padding: 2px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  color: var(--vp-c-text-2);
+}
+.st-kfilter button.active { border-color: var(--vp-c-brand-1); color: var(--vp-c-brand-1); }
+
+.st-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  align-items: start;
+}
+.st-board.st-hide-done { grid-template-columns: repeat(4, minmax(220px, 1fr)); }
+.st-board.st-hide-done .st-kcol-done { display: none; }
+.st-kcol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+  min-width: 0;
+}
+.st-khead { font-size: 14px; font-weight: 600; margin: 0 0 4px; padding: 0 2px; border: 0; line-height: 1.4; }
+.st-kcount { color: var(--vp-c-text-3); font-weight: 400; margin-left: 4px; }
+.st-kempty { font-size: 12px; color: var(--vp-c-text-3); padding: 0 2px; }
+
+.st-kcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+}
+.st-kcard:hover { border-color: var(--vp-c-brand-1); }
+.st-kcard.st-kold { display: none; }
+.st-ktitle { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.st-kmeta { font-size: 11px; color: var(--vp-c-text-3); }
+.st-kmeta code { font-size: 11px; }
+.st-ksummary {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--vp-c-text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.st-kprogress { display: flex; align-items: center; gap: 6px; }
+.st-kbar { flex: 1; height: 6px; border-radius: 3px; background: var(--vp-c-default-soft); overflow: hidden; }
+.st-kbar > span { display: block; height: 100%; background: var(--vp-c-green-2); }
+.st-knum { font-size: 11px; color: var(--vp-c-text-3); }
+
+.vp-doc .st-kfacts { font-size: 13px; color: var(--vp-c-text-2); }
+
+@media (max-width: 768px) {
+  .st-kpage { padding: 24px 16px 48px; }
+}
+
+/* The Raw part of an idea is prose: wrap it. */
+.st-idea-page .vp-doc div[class*='language-text'] pre,
+.st-idea-page .vp-doc div[class*='language-text'] code { white-space: pre-wrap; overflow-wrap: anywhere; }

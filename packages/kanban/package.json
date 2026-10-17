@@ -1,0 +1,20 @@
+{
+  "name": "@spectrail/kanban",
+  "version": "0.1.0",
+  "description": "A board of ideas and OpenSpec changes, plus the /opsx:idea command.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "commands"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "peerDependencies": {
+    "@spectrail/core": "^0.1.0"
+  }
+}

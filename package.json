@@ -1,0 +1,16 @@
+{
+  "name": "spectrail-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "example:dev": "spectrail dev --config examples/ostrivia.config.mjs",
+    "example:build": "spectrail build --config examples/ostrivia.config.mjs",
+    "example:check": "spectrail check --config examples/ostrivia.config.mjs"
+  }
+}

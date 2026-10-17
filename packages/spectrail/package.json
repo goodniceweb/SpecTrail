@@ -1,0 +1,24 @@
+{
+  "name": "spectrail",
+  "version": "0.1.0",
+  "description": "All spectrail packages in one install: the dashboard, spec pages, pen screens, vocabulary, and kanban.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "spectrail": "bin/spectrail.mjs"
+  },
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": ["bin", "index.mjs"],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "dependencies": {
+    "@spectrail/core": "0.1.0",
+    "@spectrail/kanban": "0.1.0",
+    "@spectrail/pen": "0.1.0",
+    "@spectrail/reader": "0.1.0",
+    "@spectrail/vocabulary": "0.1.0"
+  }
+}

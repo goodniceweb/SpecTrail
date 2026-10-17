@@ -1,0 +1,25 @@
+{
+  "name": "@spectrail/pen",
+  "version": "0.1.0",
+  "description": "The pen.dev screens in the specs, and the gaps between screens and specs.",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "peerDependencies": {
+    "@spectrail/core": "^0.1.0",
+    "@pen.dev/cli": ">=0.3.11"
+  },
+  "peerDependenciesMeta": {
+    "@pen.dev/cli": {
+      "optional": true
+    }
+  }
+}

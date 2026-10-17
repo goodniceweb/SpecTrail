@@ -1,0 +1,60 @@
+.vp-doc .st-ban {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 0 7px;
+  margin: 1px 0;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+.vp-doc .st-ban em { font-style: normal; opacity: 0.75; }
+.vp-doc .st-ban-hard { background: var(--vp-c-red-soft); color: var(--vp-c-red-1); }
+.vp-doc .st-ban-ctx { background: var(--vp-c-yellow-soft); color: var(--vp-c-yellow-1); }
+.vp-doc .st-ban-off { background: var(--vp-c-default-soft); color: var(--vp-c-text-3); text-decoration: line-through; }
+.vp-doc .st-vnote { color: var(--vp-c-text-3); font-size: 12px; }
+.vp-doc table.st-vtable { font-size: 13px; }
+.vp-doc table.st-vtable td:first-child { white-space: nowrap; }
+
+.vp-doc .st-vchecks {
+  margin: 20px 0 32px;
+  padding: 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  background: var(--vp-c-bg-soft);
+}
+.vp-doc .st-vbuttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.vp-doc .st-vbuttons button {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--vp-c-brand-3);
+  color: var(--vp-c-white);
+  font-size: 14px;
+  font-weight: 500;
+}
+.vp-doc .st-vbuttons button:disabled { opacity: 0.6; cursor: default; }
+.vp-doc .st-vmessage { font-size: 13px; color: var(--vp-c-yellow-1); }
+.vp-doc .st-vsummary { font-size: 14px; margin: 12px 0 8px; }
+.vp-doc .st-vwhen, .vp-doc .st-vhint { color: var(--vp-c-text-3); font-size: 12px; }
+.vp-doc .st-vtabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.vp-doc .st-vtabs button {
+  padding: 2px 10px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+}
+.vp-doc .st-vtabs button.active { border-color: var(--vp-c-brand-1); color: var(--vp-c-brand-1); }
+.vp-doc .st-vnone { font-size: 13px; color: var(--vp-c-green-1); }
+.vp-doc .st-vgroup { margin: 6px 0; font-size: 13px; }
+.vp-doc .st-vgroup summary { cursor: pointer; }
+.vp-doc .st-vgroup ul { list-style: none; padding-left: 12px; margin: 4px 0 10px; }
+.vp-doc .st-vgroup li { margin: 3px 0; line-height: 1.5; overflow-wrap: anywhere; }
+.vp-doc .st-vcount { color: var(--vp-c-text-3); margin-left: 4px; }
+.vp-doc .st-vlimit { color: var(--vp-c-text-3); font-size: 12px; margin-left: 8px; }
+.vp-doc .st-vline { font-family: var(--vp-font-family-mono); font-size: 12px; margin-right: 8px; }
+.vp-doc .st-vexcerpt { color: var(--vp-c-text-2); }
+.vp-doc .st-vexcerpt mark { background: var(--vp-c-red-soft); color: var(--vp-c-red-1); padding: 0 2px; border-radius: 3px; }
+.vp-doc .st-vinstead { color: var(--vp-c-green-1); margin-left: 8px; white-space: nowrap; }
+.vp-doc .st-vmore { color: var(--vp-c-text-3); }
+/* A long result list scrolls inside the panel, so the dictionary stays near. */
+.vp-doc .st-vresults { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
