@@ -17,8 +17,11 @@
 //   watch(ctx)            -> [{ dir, recursive, match(name), prepare: bool, delay }]
 //   checks(ctx)           -> [{ level: 'error'|'warning', message }]
 //   hooks: { name(...args, ctx) }  called by other plugins through ctx.call(name, ...args)
-//   client                a folder with browser code; its index.js default export is
-//                         called as enhanceApp({ app, router, siteData })
+//   client                a folder with browser code. Its index.js default export is
+//                         called as enhanceApp({ app, router, siteData }); a named
+//                         export `slots` ({ name: Component }) fills default-theme
+//                         layout slots, for example 'aside-outline-before'
+//   themeConfig(ctx)      -> JSON for the browser, at useData().theme.spectrail[name]
 //   commands: { name: { describe, run(ctx, args) -> exit code } }  extra CLI commands
 //   api: { name(ctx, params) -> JSON }   served at /__spectrail/api/<plugin>/<name>
 //                         under `spectrail dev` only; a static build has no server

@@ -30,6 +30,7 @@ export function reader(options = {}) {
   return {
     name: 'reader',
     styles: [join(HERE, 'reader.css')],
+    client: join(HERE, 'client'),
 
     setup(ctx) {
       ctx.links.spec = (id) => (id ? `${base}${id}/` : base);
@@ -93,8 +94,18 @@ export function reader(options = {}) {
 
     nav: () => [{ text: 'Specs', link: base }],
 
-    sidebar(ctx) {
-      return [{ text: 'Specs', link: base, items: sidebarItems(buildTree(ctx.specs.map((s) => s.id)), base) }];
+    // The left sidebar has one link. The spec tree is in the right sidebar of
+    // the spec pages (client/SpecTree.vue), in place of the page outline.
+    sidebar: () => [{ text: 'Specs', link: base }],
+
+    themeConfig(ctx) {
+      const strip = (node) => ({
+        name: node.name,
+        path: node.path,
+        cap: node.isCap,
+        children: sortedChildren(node).map(strip),
+      });
+      return { base, tree: sortedChildren(buildTree(ctx.specs.map((s) => s.id))).map(strip) };
     },
   };
 }
@@ -250,11 +261,16 @@ function renderSpec(spec, ctx) {
   flushScenario();
   flushReq();
 
-  const front = ['---', `title: ${JSON.stringify(spec.id)}`, '---', ''];
+  const reqs = spec.requirements.map((r) => [r.slug, r.name.replace(/`/g, '')]);
+  const front = ['---', `title: ${JSON.stringify(spec.id)}`, ...treeFront(spec.id), `stReqs: ${JSON.stringify(reqs)}`, '---', ''];
   return [...front, '::: v-pre', ...out, '', ':::', ''].join('\n');
 }
 
 // --- tree, sidebar, index pages ----------------------------------------------
+
+// treeFront(id) -> front matter lines: the right sidebar shows the spec tree
+// (with `id` in focus) in place of the page outline.
+const treeFront = (id) => ['outline: false', 'stSpecTree: true', `stSpec: ${JSON.stringify(id)}`];
 
 function buildTree(ids) {
   const root = { name: '', path: '', children: new Map(), isCap: false };
@@ -275,14 +291,6 @@ function buildTree(ids) {
 }
 
 const sortedChildren = (node) => [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name));
-
-function sidebarItems(node, base) {
-  return sortedChildren(node).map((child) => {
-    const link = `${base}${child.path}/`;
-    if (child.children.size === 0) return { text: child.name, link };
-    return { text: child.name, link, collapsed: false, items: sidebarItems(child, base) };
-  });
-}
 
 function statsTable(specs, ctx) {
   const cov = !!ctx.data.reader.coverage;
@@ -310,7 +318,7 @@ function indexPage(ctx) {
   }
   const cov = ctx.data.reader.coverage ? ` (${covered} covered by tests)` : '';
   return [
-    '---', 'title: Specs', '---', '', '::: v-pre', '# Specs', '',
+    '---', 'title: Specs', ...treeFront(''), '---', '', '::: v-pre', '# Specs', '',
     'These pages show `openspec/specs/`. The spec files are the source of truth. Do not edit these pages.', '',
     `- Capabilities: ${ctx.specs.length}`,
     `- Requirements: ${reqs}`,
@@ -329,7 +337,7 @@ function areaPage(node, ctx) {
   };
   sortedChildren(node).forEach(collect);
   const specs = caps.map((id) => ctx.specs.find((s) => s.id === id));
-  const lines = ['---', `title: ${JSON.stringify(node.path)}`, '---', '', '::: v-pre', `# ${node.path}/`, ''];
+  const lines = ['---', `title: ${JSON.stringify(node.path)}`, ...treeFront(node.path), '---', '', '::: v-pre', `# ${node.path}/`, ''];
   lines.push(...statsTable(specs, ctx), '');
   for (const spec of specs) {
     lines.push(`## [\`${spec.id}\`](${ctx.links.spec(spec.id)}) {#${slugify(spec.id)}}`, '', inline(spec.purpose, ctx), '');

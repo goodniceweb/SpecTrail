@@ -30,3 +30,17 @@
 }
 .vp-doc .count, .vp-doc .hint { color: var(--vp-c-text-3); font-size: 12px; }
 .vp-doc .missing { color: var(--vp-c-red-1); font-size: 12px; }
+
+/* The spec tree in the right sidebar (client/SpecTree.vue). */
+.st-spec-tree { font-size: 13px; line-height: 1.5; padding-left: 16px; border-left: 1px solid var(--vp-c-divider); }
+.st-spec-tree a { color: var(--vp-c-text-2); text-decoration: none; display: block; padding: 2px 0; transition: color 0.2s; }
+.st-spec-tree a:hover { color: var(--vp-c-text-1); }
+.st-spec-tree a.active { color: var(--vp-c-brand-1); font-weight: 600; }
+.st-spec-tree a.folder { color: var(--vp-c-text-1); font-weight: 500; }
+.st-spec-tree a.folder.active { color: var(--vp-c-brand-1); }
+.st-spec-tree .st-tree-title { font-weight: 600; color: var(--vp-c-text-1); margin-bottom: 4px; }
+.st-spec-tree ul { list-style: none; margin: 0; padding: 0; }
+.st-spec-tree .st-tree .st-tree { padding-left: 12px; }
+.st-spec-tree .st-tree-reqs { padding-left: 12px; margin: 2px 0 6px; border-left: 2px solid var(--vp-c-brand-soft); }
+.st-spec-tree .st-tree-reqs a { font-size: 12px; padding: 1px 0 1px 8px; color: var(--vp-c-text-3); }
+.st-spec-tree .st-tree-reqs a:hover { color: var(--vp-c-text-1); }

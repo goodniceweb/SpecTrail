@@ -1,5 +1,5 @@
 // Writes the VitePress source tree (workDir/site) from the specs and the plugins.
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,30 @@ export async function prepare(ctx, { force = false, only = null } = {}) {
 function vitepressRoot() {
   const req = createRequire(import.meta.url);
   return dirname(req.resolve('vitepress/package.json'));
+}
+
+// linkVitepress(siteDir): Vite looks for vitepress and vue from the site
+// folder (`vue/server-renderer` in the static build, for example). With a
+// linked install, they are not under the project, so the site folder gets
+// links to the copies that the core uses.
+function linkVitepress(siteDir) {
+  const vpRoot = vitepressRoot();
+  const wanted = {
+    vitepress: vpRoot,
+    vue: dirname(createRequire(join(vpRoot, 'package.json')).resolve('vue/package.json')),
+  };
+  for (const [name, target] of Object.entries(wanted)) {
+    try {
+      createRequire(join(siteDir, 'index.js')).resolve(`${name}/package.json`);
+      continue;
+    } catch {
+      // Not visible from the site folder: make the link.
+    }
+    const link = join(siteDir, 'node_modules', name);
+    mkdirSync(dirname(link), { recursive: true });
+    rmSync(link, { force: true, recursive: false });
+    symlinkSync(target, link, 'dir');
+  }
 }
 
 function siteConfig(ctx, nav, sidebar) {
@@ -74,7 +98,8 @@ export async function buildSite(ctx) {
 
   // Remove the pages that the plugins do not make now.
   const wanted = new Set([...pages.keys()].map((rel) => join(siteDir, rel)));
-  const skip = (f) => f === join(siteDir, '.vitepress') || f === join(siteDir, 'public');
+  // node_modules can hold the vitepress link (see linkVitepress): never walk into it.
+  const skip = (f) => [join(siteDir, '.vitepress'), join(siteDir, 'public'), join(siteDir, 'node_modules')].includes(f);
   for (const f of listFiles(siteDir, skip)) {
     if (f.endsWith('.md') && !wanted.has(f)) {
       rmSync(f);
@@ -107,17 +132,30 @@ export async function buildSite(ctx) {
   for (const f of listFiles(pluginsDir)) {
     if (!clients.some((p) => f.startsWith(join(pluginsDir, p.name) + sep))) rmSync(f);
   }
-  const clientImports = clients.map((p, i) => `import client${i} from './plugins/${p.name}/index.js';`);
-  const enhance = clients.map((_p, i) => `    client${i}(ctx);`);
+  // A client module can also export `slots`: { slotName: Component } for the
+  // default theme layout (for example 'aside-outline-before').
+  const clientImports = clients.map((p, i) => `import * as client${i} from './plugins/${p.name}/index.js';`);
+  const enhance = clients.map((_p, i) => `    client${i}.default?.(ctx);`);
+  const modules = clients.map((_p, i) => `client${i}`).join(', ');
   writeIfChanged(
     join(themeDir, 'index.js'),
     [
+      "import { h } from 'vue';",
       "import DefaultTheme from 'vitepress/theme';",
       ...imports,
       ...clientImports,
       '',
+      '// Two plugins can fill one slot: both components render, in config order.',
+      'const slots = {};',
+      `for (const mod of [${modules}]) {`,
+      '  for (const [name, c] of Object.entries(mod.slots || {})) (slots[name] ||= []).push(c);',
+      '}',
+      '',
       'export default {',
       '  extends: DefaultTheme,',
+      '  Layout() {',
+      '    return h(DefaultTheme.Layout, null, Object.fromEntries(Object.entries(slots).map(([name, cs]) => [name, () => cs.map((c) => h(c))])));',
+      '  },',
       '  enhanceApp(ctx) {',
       ...enhance,
       '  },',
@@ -130,7 +168,12 @@ export async function buildSite(ctx) {
   const sidebar = [{ text: 'Dashboard', link: '/' }];
   for (const { result } of await eachPlugin(ctx, 'nav')) nav.push(...(result || []));
   for (const { result } of await eachPlugin(ctx, 'sidebar')) sidebar.push(...(result || []));
-  writeIfChanged(join(siteDir, '.vitepress', 'site.json'), `${JSON.stringify(siteConfig(ctx, nav, sidebar), null, 2)}\n`);
+  // Browser data: a plugin's themeConfig() result is at useData().theme.spectrail[<plugin name>].
+  const data = {};
+  for (const { plugin, result } of await eachPlugin(ctx, 'themeConfig')) if (result) data[plugin.name] = result;
+  const site = siteConfig(ctx, nav, sidebar);
+  site.themeConfig.spectrail = data;
+  writeIfChanged(join(siteDir, '.vitepress', 'site.json'), `${JSON.stringify(site, null, 2)}\n`);
   writeIfChanged(
     join(siteDir, '.vitepress', 'config.mjs'),
     [
@@ -152,6 +195,7 @@ export async function buildSite(ctx) {
     if (!dirs.some((d) => rel.startsWith(`${d.to}/`))) rmSync(f);
   }
 
+  linkVitepress(siteDir);
   ctx.log(`${pages.size} pages (${changed} changed)`);
   return { pages: pages.size, changed };
 }

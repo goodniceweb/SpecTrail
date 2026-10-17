@@ -186,7 +186,7 @@ export function kanban(options = {}) {
       return `<section class="st-kcol st-kcol-${id}"><h2 class="st-khead">${esc(title)} <span class="st-kcount">${list.length}</span></h2>${body}</section>`;
     });
     return [
-      '---', 'title: Board', 'layout: page', 'sidebar: false', 'aside: false', '---', '',
+      '---', 'title: Board', 'layout: page', 'aside: false', '---', '',
       '<div class="st-kpage">', '',
       '<h1 class="st-ktop">Board</h1>', '',
       '<StBoardFilter />', '',

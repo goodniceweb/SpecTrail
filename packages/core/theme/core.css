@@ -2,6 +2,20 @@
   --vp-layout-max-width: 1600px;
 }
 
+/* The wider layout makes the default right padding of the nav bar smaller
+   than 32px when the window is 1440px to 1600px wide. Keep 32px at least.
+   The selector is long because the VitePress rule is scoped. */
+@media (min-width: 1440px) {
+  .VPNav .VPNavBar.has-sidebar .container .content {
+    padding-right: max(32px, calc((100vw - var(--vp-layout-max-width)) / 2 + 32px));
+  }
+}
+
+/* The default search button is narrow (about 117px). */
+@media (min-width: 768px) {
+  .DocSearch-Button { min-width: 200px; }
+}
+
 .vp-doc .st-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

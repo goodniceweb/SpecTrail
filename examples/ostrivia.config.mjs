@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 const ROOT = process.env.OSTRIVIA_ROOT;
 if (!ROOT) throw new Error('Set OSTRIVIA_ROOT to the path of the Ostrivia monorepo.');
 
-const { default: config } = await import(pathToFileURL(join(ROOT, 'spectrail.config.mjs')).href);
+const { default: config } = await import(pathToFileURL(join(ROOT, 'spectrail', 'spectrail.config.mjs')).href);
 
 export default {
   ...config,

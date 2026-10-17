@@ -39,6 +39,29 @@ lists `@pen.dev/cli` as an optional peer dependency.
    - `npx spectrail check`: run the plugin checks. An error gives exit code 1, for CI.
    - `npx spectrail prepare`: do only the slow steps, for example the screen export.
 
+### Before the first npm release
+
+spectrail is not on npm yet. A project can link a local checkout:
+
+```sh
+npm i -D file:../spectrail/packages/spectrail
+```
+
+The path is relative to the project. Run `npm install` in the spectrail checkout first.
+VitePress and Vue then sit in the spectrail checkout, not in the project, so the core
+links them into `.spectrail/site/node_modules/`.
+
+If CI runs `npm ci` in the project root, do not add the link there: CI has no
+spectrail checkout. Give spectrail its own folder with its own `package.json`
+instead, as Ostrivia does in `spectrail/`, and call it with `npm --prefix spectrail`.
+
+## Spec pages (reader plugin)
+
+The left sidebar has one "Specs" link. On the spec pages, the right sidebar shows the
+tree of all specs in place of the page outline. The spec in focus also lists its
+requirements. On a screen narrower than 1280 px, VitePress hides the right sidebar;
+the "Specs" page then lists all specs.
+
 ## Screens in the specs (pen plugin)
 
 Put an HTML comment under the requirement text. Markdown does not show it.
@@ -52,6 +75,16 @@ The HUD SHALL show ...
 
 If a requirement in a UI spec is about function only, write `<!-- screen: none -->`.
 The plugin then does not list it as a gap.
+
+The plugin exports only **screens**: top-level frames that are not reusable components
+and are at least `minWidth` px wide (default 320). Components, icons, and loose parts
+have a meaning only inside a screen, so the gallery does not list them as gaps.
+Options:
+
+- `files`: globs of the `.pen` files to export, for example `['app.pen', 'web.pen']`.
+  The default is every `.pen` file except the `.lib.pen` libraries.
+- `minWidth`: the smallest width of a screen.
+- `include`: more top-level node ids to export, for example a narrow dialog frame.
 
 The pen CLI needs a key. The plugin reads `PEN_CLI_KEY`. On macOS it uses the
 Keychain entry `pen-cli-key` if the variable is not set. The key goes only
@@ -119,7 +152,9 @@ The full list is in `packages/core/src/index.mjs`. In short:
 - `pages`, `nav`, `sidebar`, `cards`: add to the site.
 - `checks`: add to `spectrail check`.
 - `watch`, `publicDirs`: add folders to watch, and static files.
-- `client`: a folder with browser code, for example Vue components.
+- `client`: a folder with browser code, for example Vue components. Its `slots` export
+  fills layout slots of the default theme, for example the right sidebar.
+- `themeConfig`: JSON for the browser code, at `useData().theme.spectrail[<plugin>]`.
 - `commands`: extra CLI commands, for example `install-idea-command`.
 - `api`: functions that the page calls at `/__spectrail/api/<plugin>/<name>`, under `spectrail dev` only.
 - `hooks`: functions that other plugins call. For example, the reader calls

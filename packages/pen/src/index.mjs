@@ -23,6 +23,10 @@ const DESIGN_LINE = /^Design:\s*(.+)$/;
 //   strict       `spectrail check` fails on the gaps, not only on bad links
 //   base         the URL folder of the gallery; default '/design/'
 //   cli          the path of the pen CLI script; default: @pen.dev/cli of the project
+//   files        globs of the .pen files to export, for example ['app.pen'];
+//                default: every .pen file except the `.lib.pen` libraries
+//   minWidth     a screen is a top-level, not reusable frame at least this wide; default 320
+//   include      more top-level node ids to export, for example a narrow dialog frame
 export function pen(options = {}) {
   const base = `/${(options.base || '/design/').replace(/^\/+|\/+$/g, '')}/`;
   const uiSpecs = options.uiSpecs || [];
@@ -111,6 +115,8 @@ export function pen(options = {}) {
       '---', 'title: Design screens', 'aside: false', '---', '', '::: v-pre', '# Design screens', '',
       'A requirement names a screen with `<!-- screen: <path>.pen#<id> -->`. The spec pages show the screens',
       'next to the requirements. This page shows the gaps first, then all screens.', '',
+      `A screen is a top-level frame, at least ${options.minWidth ?? 320} px wide, that is not a reusable component.`,
+      'Components and icons are not here: they have a meaning only inside a screen.', '',
     ];
     if (d.manifest.screens.length === 0) {
       lines.push('No screens are exported. Run `spectrail prepare` (it needs the pen CLI).', '');
@@ -179,7 +185,10 @@ export function pen(options = {}) {
 
     prepare(ctx, { force }) {
       const { designDir, outDir } = dirs(ctx);
-      exportScreens({ root: ctx.root, designDir, outDir, cli: options.cli, force });
+      exportScreens({
+        root: ctx.root, designDir, outDir, cli: options.cli, dirs: [dirname(ctx.config.file)], force,
+        files: options.files, minWidth: options.minWidth ?? 320, include: options.include || [],
+      });
     },
 
     load(ctx) {
