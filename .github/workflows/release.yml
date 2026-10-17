@@ -1,0 +1,36 @@
+# Publishes all packages to npm when a tag `v<version>` is pushed.
+# It uses npm trusted publishing (OIDC), so the repo keeps no npm token.
+# Set up a trusted publisher on npmjs.com for each package first:
+# repository goodniceweb/spectrail, workflow release.yml.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          OPENSPEC_TELEMETRY: '0'
+      - name: Check that the tag and the package versions are the same
+        run: |
+          for f in packages/*/package.json; do
+            v=$(node -p "require('./$f').version")
+            [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "$f has $v, the tag is $GITHUB_REF_NAME"; exit 1; }
+          done
+      - run: npm publish --workspaces --provenance --access public

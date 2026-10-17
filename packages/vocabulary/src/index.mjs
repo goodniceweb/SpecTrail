@@ -24,6 +24,26 @@ const DEFAULT_REPO_EXCLUDE = [
   '**/*.min.js', '**/package-lock.json', '**/CHANGELOG.md',
 ];
 
+// readScannable(full) -> the text of a file, or null if it is too big or not readable.
+function readScannable(full) {
+  try {
+    if (statSync(full).size > MAX_FILE) return null;
+    return readFileSync(full, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+// addContextual(byWord, hit, item, rule) counts a contextual hit and keeps a few samples.
+function addContextual(byWord, hit, item, rule) {
+  if (!byWord.has(hit.word)) {
+    byWord.set(hit.word, { word: hit.word, limits: rule?.limits || [], instead: rule?.instead || [], count: 0, items: [] });
+  }
+  const w = byWord.get(hit.word);
+  w.count += 1;
+  if (w.items.length < SAMPLES) w.items.push(item);
+}
+
 // vocabulary(options)
 //   file             the dictionary; default `<openspecDir>/dictionary.md`
 //   openspecExclude  globs under openspec/ to skip; default ['changes/archive/**'] (history)
@@ -97,29 +117,15 @@ export function vocabulary(options = {}) {
     const ruleOf = new Map(dict.rules.map((r) => [r.word, r]));
     let scanned = 0;
     for (const f of list) {
-      const full = join(ctx.root, f);
-      let text;
-      try {
-        if (statSync(full).size > MAX_FILE) continue;
-        text = readFileSync(full, 'utf8');
-      } catch {
-        continue;
-      }
+      const text = readScannable(join(ctx.root, f));
+      if (text === null) continue;
       scanned += 1;
       for (const hit of scanText(f, text, match, { quotes: options.quotes !== false })) {
         const rule = ruleOf.get(hit.word);
         const url = ctx.fileUrl(f);
         const item = { ...hit, url: url ? `${url}#L${hit.line}` : null, instead: rule?.instead || [] };
-        if (!hit.contextual) {
-          hard.push(item);
-          continue;
-        }
-        if (!byWord.has(hit.word)) {
-          byWord.set(hit.word, { word: hit.word, limits: rule?.limits || [], instead: rule?.instead || [], count: 0, items: [] });
-        }
-        const w = byWord.get(hit.word);
-        w.count += 1;
-        if (w.items.length < SAMPLES) w.items.push(item);
+        if (hit.contextual) addContextual(byWord, hit, item, rule);
+        else hard.push(item);
       }
     }
     return {

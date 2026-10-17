@@ -1,0 +1,4 @@
+schema: spec-driven
+
+context: |
+  A sample todo app for the spectrail examples.

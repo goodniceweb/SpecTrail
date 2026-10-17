@@ -1,0 +1,37 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "examples/**/spectrail.config.mjs",
+        "examples/*.config.mjs",
+        "test/**/*.test.mjs",
+        "scripts/*.mjs"
+      ],
+      "ignoreBinaries": [
+        "spectrail"
+      ],
+      "ignoreDependencies": [
+        "@fission-ai/openspec"
+      ]
+    },
+    "packages/reader": {
+      "entry": [
+        "src/client/index.js"
+      ]
+    },
+    "packages/kanban": {
+      "entry": [
+        "src/client/index.js"
+      ]
+    },
+    "packages/vocabulary": {
+      "entry": [
+        "src/client/index.js"
+      ]
+    }
+  },
+  "rules": {
+    "duplicates": "off"
+  }
+}

@@ -48,7 +48,7 @@ function expand(phrase) {
 }
 
 // parseBans("a, b (for x)") -> [{ word, limit }]
-export function parseBans(list) {
+function parseBans(list) {
   const items = splitList(list.replace(/\.\s*$/, ''));
   const limitOf = (item) => item.match(/\(([^()]*)\)\s*$/)?.[1].trim() || null;
   const last = items.length > 1 ? limitOf(items[items.length - 1]) : null;
@@ -82,85 +82,88 @@ function uniqueInstead(list) {
 
 const cells = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
 
-// parseDictionary(text) -> { title, sections: [{ title, entries: [{ term, note, definition, bans }] }],
-//   tables: [{ section, rows: [{ bans, instead }] }], rules }
-// rules: one per banned word: { word, contextual, limits: [string], instead: [string], sources: [string] }
-export function parseDictionary(text) {
-  const lines = text.split('\n');
-  const sections = [];
-  const tables = [];
-  let section = { title: '', entries: [] };
-  let entry = null;
-  let table = null;
-  const title = text.match(/^#\s+(.+)$/m)?.[1].trim() || 'Dictionary';
+// closeEntry(st) ends the open list entry and adds it to the open section.
+function closeEntry(st) {
+  const entry = st.entry;
+  if (!entry) return;
+  entry.definition = entry.definition.replace(/\s+/g, ' ').trim();
+  const ban = entry.definition.match(/Do not\s+use:\s*([^.]*(?:\.[^\s][^.]*)*)\./i);
+  entry.bans = ban ? parseBans(ban[1]) : [];
+  st.section.entries.push(entry);
+  st.entry = null;
+}
 
-  const closeEntry = () => {
-    if (!entry) return;
-    entry.definition = entry.definition.replace(/\s+/g, ' ').trim();
-    const ban = entry.definition.match(/Do not\s+use:\s*([^.]*(?:\.[^\s][^.]*)*)\./i);
-    entry.bans = ban ? parseBans(ban[1]) : [];
-    section.entries.push(entry);
-    entry = null;
-  };
+// endSection(st) adds the open section to the list, if it has a title or entries.
+function endSection(st) {
+  if (st.section.entries.length || st.section.title) st.sections.push(st.section);
+}
 
-  for (const line of lines) {
-    const head = line.match(/^##\s+(.+)$/);
-    if (head) {
-      closeEntry();
-      table = null;
-      if (section.entries.length || section.title) sections.push(section);
-      section = { title: head[1].trim(), entries: [] };
-      continue;
+// readTableLine(st, line) reads one line of a table; only the ban tables are kept.
+function readTableLine(st, line) {
+  closeEntry(st);
+  const c = cells(line);
+  if (!st.table) {
+    if (/^do not (write|use)/i.test(c[0])) {
+      st.table = { section: st.section.title, header: c, rows: [] };
+      st.tables.push(st.table);
     }
-    if (/^\s*\|/.test(line)) {
-      closeEntry();
-      const c = cells(line);
-      if (!table) {
-        if (/^do not (write|use)/i.test(c[0])) {
-          table = { section: section.title, header: c, rows: [] };
-          tables.push(table);
-        }
-        continue;
-      }
-      if (c.every((x) => /^:?-+:?$/.test(x))) continue;
-      table.rows.push({ bans: parseBans(c[0]), instead: c[1] || '' });
-      continue;
-    }
-    table = null;
-    const item = line.match(/^- \*\*(.+?)\*\*\s*(\([^)]*\))?\s*(?:—|–|-{1,2})\s*(.*)$/);
-    if (item) {
-      closeEntry();
-      entry = { term: item[1].trim(), note: item[2] ? item[2].slice(1, -1) : null, definition: item[3] };
-      continue;
-    }
-    if (entry && /^\s+\S/.test(line)) {
-      entry.definition += ` ${line.trim()}`;
-      continue;
-    }
-    closeEntry();
+    return;
   }
-  closeEntry();
-  if (section.entries.length || section.title) sections.push(section);
+  if (c.every((x) => /^:?-+:?$/.test(x))) return;
+  st.table.rows.push({ bans: parseBans(c[0]), instead: c[1] || '' });
+}
 
+// readLine(st, line) reads one line of the dictionary into the parser state.
+function readLine(st, line) {
+  const head = line.match(/^##\s+(.+)$/);
+  if (head) {
+    closeEntry(st);
+    st.table = null;
+    endSection(st);
+    st.section = { title: head[1].trim(), entries: [] };
+    return;
+  }
+  if (/^\s*\|/.test(line)) {
+    readTableLine(st, line);
+    return;
+  }
+  st.table = null;
+  const item = line.match(/^- \*\*(.+?)\*\*\s*(\([^)]*\))?\s*(?:—|–|-{1,2})\s*(.*)$/);
+  if (item) {
+    closeEntry(st);
+    st.entry = { term: item[1].trim(), note: item[2] ? item[2].slice(1, -1) : null, definition: item[3] };
+  } else if (st.entry && /^\s+\S/.test(line)) {
+    st.entry.definition += ` ${line.trim()}`;
+  } else {
+    closeEntry(st);
+  }
+}
+
+// addRule(rules, ban, instead, source) adds one ban to the map of rules, one rule for each word.
+function addRule(rules, ban, instead, source) {
+  const key = ban.word.toLowerCase();
+  if (!rules.has(key)) rules.set(key, { word: ban.word, limits: [], plain: false, instead: [], sources: [] });
+  const r = rules.get(key);
+  if (!ban.limit) r.plain = true;
+  else if (!r.limits.includes(ban.limit)) r.limits.push(ban.limit);
+  if (instead && !r.instead.includes(instead)) r.instead.push(instead);
+  if (!r.sources.includes(source)) r.sources.push(source);
+}
+
+// collectRules(sections, tables) -> Map of the rules from the entries and the tables.
+function collectRules(sections, tables) {
   const rules = new Map();
-  const add = (ban, instead, source) => {
-    const key = ban.word.toLowerCase();
-    if (!rules.has(key)) rules.set(key, { word: ban.word, limits: [], plain: false, instead: [], sources: [] });
-    const r = rules.get(key);
-    if (ban.limit) {
-      if (!r.limits.includes(ban.limit)) r.limits.push(ban.limit);
-    } else {
-      r.plain = true;
-    }
-    if (instead && !r.instead.includes(instead)) r.instead.push(instead);
-    if (!r.sources.includes(source)) r.sources.push(source);
-  };
   for (const s of sections) {
-    for (const e of s.entries) for (const b of e.bans) add(b, e.term, s.title);
+    for (const e of s.entries) for (const b of e.bans) addRule(rules, b, e.term, s.title);
   }
   for (const t of tables) {
-    for (const row of t.rows) for (const b of row.bans) add(b, row.instead, t.section);
+    for (const row of t.rows) for (const b of row.bans) addRule(rules, b, row.instead, t.section);
   }
+  return rules;
+}
+
+// ruleList(rules, sections) -> the final rules, sorted by word.
+function ruleList(rules, sections) {
   // The text of the definitions without the ban sentences. If the dictionary
   // itself uses a banned word there, the word has other, approved senses.
   const prose = sections
@@ -182,10 +185,22 @@ export function parseDictionary(text) {
       sources: r.sources,
     };
   });
+  return list.sort((a, b) => a.word.localeCompare(b.word));
+}
+
+// parseDictionary(text) -> { title, sections: [{ title, entries: [{ term, note, definition, bans }] }],
+//   tables: [{ section, rows: [{ bans, instead }] }], rules }
+// rules: one per banned word: { word, contextual, limits: [string], instead: [string], sources: [string] }
+export function parseDictionary(text) {
+  const st = { sections: [], tables: [], section: { title: '', entries: [] }, entry: null, table: null };
+  const title = text.match(/^#\s+(.+)$/m)?.[1].trim() || 'Dictionary';
+  for (const line of text.split('\n')) readLine(st, line);
+  closeEntry(st);
+  endSection(st);
   return {
     title,
-    sections: sections.filter((s) => s.entries.length),
-    tables,
-    rules: list.sort((a, b) => a.word.localeCompare(b.word)),
+    sections: st.sections.filter((s) => s.entries.length),
+    tables: st.tables,
+    rules: ruleList(collectRules(st.sections, st.tables), st.sections),
   };
 }

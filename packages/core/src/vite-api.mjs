@@ -4,6 +4,7 @@
 export const API_PREFIX = '/__spectrail/api';
 export const HANDLER_KEY = Symbol.for('spectrail.api');
 
+/** @public The generated VitePress config imports this function by file path. */
 export function spectrailApi() {
   return {
     name: 'spectrail-api',

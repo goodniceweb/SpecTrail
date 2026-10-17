@@ -24,6 +24,7 @@ export function writeIfChanged(path, content) {
 }
 
 // listFiles(dir, skip) -> every file under dir. skip(fullPath) skips a file or a folder.
+/** @param {string} dir @param {(path: string) => boolean} [skip] @returns {string[]} */
 export function listFiles(dir, skip = () => false) {
   const out = [];
   if (!existsSync(dir)) return out;
@@ -37,6 +38,7 @@ export function listFiles(dir, skip = () => false) {
 }
 
 // syncDir(from, to, match) copies the matching files and removes the others from `to`.
+/** @param {string} from @param {string} to @param {(path: string) => boolean} [match] */
 export function syncDir(from, to, match = () => true) {
   const wanted = new Set();
   for (const src of listFiles(from, (f) => f.endsWith('.tmp'))) {

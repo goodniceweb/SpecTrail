@@ -70,6 +70,82 @@ function mdBody(text) {
   }).join('\n');
 }
 
+// The label of the date on a card page, for each card kind.
+const DATE_LABELS = { archive: 'Archived', idea: 'Created', change: 'Last change' };
+
+// changeColumn(c) -> the board column of an active change, from its task counts.
+function changeColumn(c) {
+  const done = c.completedTasks || 0;
+  if (done === 0) return 'todo';
+  return done < (c.totalTasks || 0) ? 'progress' : 'testing';
+}
+
+// archiveTasks(dir) -> { done, total } from the tasks.md of an archived change.
+function archiveTasks(dir) {
+  const tasksFile = join(dir, 'tasks.md');
+  return existsSync(tasksFile) ? countTasks(readFileSync(tasksFile, 'utf8')) : { done: 0, total: 0 };
+}
+
+// ideaOf(dir, file, byName, base) -> the idea card for one file of the ideas folder.
+function ideaOf(dir, file, byName, base) {
+  const full = join(dir, file);
+  const { data, body } = frontmatter(readFileSync(full, 'utf8'));
+  const stem = file.replace(/\.md$/, '');
+  const m = stem.match(DATE_PREFIX);
+  const slug = m ? m[2] : stem;
+  const heading = body.match(/^#\s+(.+)$/m)?.[1];
+  return {
+    kind: 'idea', column: 'exploring', file: full, slug, name: slug,
+    title: data.title || heading || slug,
+    date: data.created || (m ? m[1] : null),
+    change: data.change || (byName.has(slug) ? slug : null),
+    url: `${base}ideas/${stem}/`,
+    summary: whyOf(body.replace(/^##[^\n]*\n/gm, '\n')),
+  };
+}
+
+// cardFacts(c) -> the lines of the facts paragraph on a card page.
+function cardFacts(c) {
+  const column = COLUMNS.find(([id]) => id === c.column)?.[1] || 'Linked to a change';
+  const facts = [`Column: ${column}`];
+  if (c.date) facts.push(`${DATE_LABELS[c.kind] || DATE_LABELS.change}: ${c.date}`);
+  if (c.kind !== 'idea' && c.total) facts.push(`Tasks: ${c.done}/${c.total}`);
+  return facts;
+}
+
+// changeFileLines(dir) -> the markdown of the files of a change, in the page order.
+function changeFileLines(dir) {
+  const lines = [];
+  const extra = readdirSync(dir).filter((f) => f.endsWith('.md') && !CHANGE_FILES.includes(f)).sort();
+  for (const f of [...CHANGE_FILES, ...extra]) {
+    const file = join(dir, f);
+    if (!existsSync(file)) continue;
+    const text = readFileSync(file, 'utf8');
+    // A file with its own title (`# Proposal`) needs no file-name heading.
+    const titled = /^\s*# /.test(frontmatter(text).body);
+    if (!titled) lines.push(`## ${f} {#${f.replace(/\.md$/, '')}}`, '');
+    lines.push(mdBody(text), '');
+  }
+  return lines;
+}
+
+// changeLines(ctx, c) -> the markdown body of the page of a change or an archived change.
+function changeLines(ctx, c) {
+  const lines = [];
+  if (c.ideas.length) {
+    lines.push(`From the ideas: ${c.ideas.map((i) => `[${esc(i.title)}](${i.url})`).join(', ')}.`, '');
+  }
+  if (c.specs.length) {
+    lines.push('Specs that this change touches:', '');
+    for (const id of c.specs) {
+      const url = ctx.links.spec(id);
+      lines.push(`- ${url && ctx.specs.some((s) => s.id === id) ? `[\`${id}\`](${url})` : `\`${id}\` (new)`}`);
+    }
+    lines.push('');
+  }
+  return [...lines, ...changeFileLines(c.dir)];
+}
+
 // kanban(options)
 //   ideasDir   the folder of the ideas; default `<openspecDir>/ideas`
 //   base       the URL folder of the board; default '/board/'
@@ -100,63 +176,47 @@ export function kanban(options = {}) {
     };
   }
 
-  function load(ctx) {
-    const { changesDir } = ctx.config;
-    const cards = [];
-
-    for (const c of ctx.openspec.changes) {
+  function changeCards(ctx) {
+    return ctx.openspec.changes.map((c) => {
       const done = c.completedTasks || 0;
-      const total = c.totalTasks || 0;
-      const column = done === 0 ? 'todo' : done < total ? 'progress' : 'testing';
-      cards.push(changeCard(ctx, join(changesDir, c.name), {
-        kind: 'change', column, name: c.name, title: c.name, done, total,
+      return changeCard(ctx, join(ctx.config.changesDir, c.name), {
+        kind: 'change', column: changeColumn(c), name: c.name, title: c.name, done, total: c.totalTasks || 0,
         date: c.lastModified ? c.lastModified.slice(0, 10) : null,
         url: `${base}changes/${c.name}/`,
+      });
+    });
+  }
+
+  function archiveCards(ctx) {
+    const archiveDir = join(ctx.config.changesDir, 'archive');
+    if (!existsSync(archiveDir)) return [];
+    const cards = [];
+    for (const folder of readdirSync(archiveDir).sort().reverse()) {
+      const dir = join(archiveDir, folder);
+      if (!statSync(dir).isDirectory()) continue;
+      const m = folder.match(DATE_PREFIX);
+      cards.push(changeCard(ctx, dir, {
+        kind: 'archive', column: 'done', name: m ? m[2] : folder, title: m ? m[2] : folder, ...archiveTasks(dir),
+        date: m ? m[1] : null,
+        url: `${base}archive/${folder}/`,
       }));
     }
+    return cards;
+  }
 
-    const archiveDir = join(changesDir, 'archive');
-    if (existsSync(archiveDir)) {
-      for (const folder of readdirSync(archiveDir).sort().reverse()) {
-        const dir = join(archiveDir, folder);
-        if (!statSync(dir).isDirectory()) continue;
-        const m = folder.match(DATE_PREFIX);
-        const tasksFile = join(dir, 'tasks.md');
-        const { done, total } = existsSync(tasksFile) ? countTasks(readFileSync(tasksFile, 'utf8')) : { done: 0, total: 0 };
-        cards.push(changeCard(ctx, dir, {
-          kind: 'archive', column: 'done', name: m ? m[2] : folder, title: m ? m[2] : folder, done, total,
-          date: m ? m[1] : null,
-          url: `${base}archive/${folder}/`,
-        }));
-      }
-    }
-
+  function load(ctx) {
+    const cards = [...changeCards(ctx), ...archiveCards(ctx)];
     const byName = new Map(cards.map((c) => [c.name, c]));
     const ideas = [];
     const dir = ideasDir(ctx);
-    if (existsSync(dir)) {
-      for (const file of readdirSync(dir).sort().reverse()) {
-        if (!file.endsWith('.md') || /^readme\.md$/i.test(file)) continue;
-        const full = join(dir, file);
-        const text = readFileSync(full, 'utf8');
-        const { data, body } = frontmatter(text);
-        const stem = file.replace(/\.md$/, '');
-        const m = stem.match(DATE_PREFIX);
-        const slug = m ? m[2] : stem;
-        const heading = body.match(/^#\s+(.+)$/m)?.[1];
-        const idea = {
-          kind: 'idea', column: 'exploring', file: full, slug, name: slug,
-          title: data.title || heading || slug,
-          date: data.created || (m ? m[1] : null),
-          change: data.change || (byName.has(slug) ? slug : null),
-          url: `${base}ideas/${stem}/`,
-          summary: whyOf(body.replace(/^##[^\n]*\n/gm, '\n')),
-        };
-        ideas.push(idea);
-        const target = idea.change && byName.get(idea.change);
-        if (target) target.ideas.push(idea);
-        else if (!idea.change) cards.push(idea);
-      }
+    const files = existsSync(dir) ? readdirSync(dir).sort().reverse() : [];
+    for (const file of files) {
+      if (!file.endsWith('.md') || /^readme\.md$/i.test(file)) continue;
+      const idea = ideaOf(dir, file, byName, base);
+      ideas.push(idea);
+      const target = idea.change && byName.get(idea.change);
+      if (target) target.ideas.push(idea);
+      else if (!idea.change) cards.push(idea);
     }
     ctx.data.kanban = { cards, ideas, ideasDir: dir };
   }
@@ -197,44 +257,21 @@ export function kanban(options = {}) {
     ].join('\n');
   }
 
+  function ideaLines(ctx, c) {
+    const lines = [];
+    if (c.change) {
+      const target = ctx.data.kanban.cards.find((x) => x.name === c.change && x.kind !== 'idea');
+      lines.push(target ? `This idea became the change [\`${c.change}\`](${target.url}).` : `This idea names the change \`${c.change}\`, but no such change exists.`, '');
+    }
+    lines.push(`File: \`${rel(ctx, c.file)}\``, '', mdBody(readFileSync(c.file, 'utf8')), '');
+    return lines;
+  }
+
   function cardPage(ctx, c) {
-    const column = COLUMNS.find(([id]) => id === c.column)?.[1] || 'Linked to a change';
     const page = c.kind === 'idea' ? ['pageClass: st-idea-page'] : [];
     const lines = ['---', `title: ${JSON.stringify(c.title)}`, ...page, '---', '', '::: v-pre', `# ${esc(c.kind === 'idea' ? c.title : c.name)}`, ''];
-    const facts = [`Column: ${column}`];
-    if (c.date) facts.push(`${c.kind === 'archive' ? 'Archived' : c.kind === 'idea' ? 'Created' : 'Last change'}: ${c.date}`);
-    if (c.kind !== 'idea' && c.total) facts.push(`Tasks: ${c.done}/${c.total}`);
-    lines.push(`<p class="st-kfacts">${facts.map(esc).join(' · ')} · <a href="${base}">Board</a></p>`, '');
-
-    if (c.kind === 'idea') {
-      if (c.change) {
-        const target = ctx.data.kanban.cards.find((x) => x.name === c.change && x.kind !== 'idea');
-        lines.push(target ? `This idea became the change [\`${c.change}\`](${target.url}).` : `This idea names the change \`${c.change}\`, but no such change exists.`, '');
-      }
-      lines.push(`File: \`${rel(ctx, c.file)}\``, '', mdBody(readFileSync(c.file, 'utf8')), '');
-    } else {
-      if (c.ideas.length) {
-        lines.push(`From the ideas: ${c.ideas.map((i) => `[${esc(i.title)}](${i.url})`).join(', ')}.`, '');
-      }
-      if (c.specs.length) {
-        lines.push('Specs that this change touches:', '');
-        for (const id of c.specs) {
-          const url = ctx.links.spec(id);
-          lines.push(`- ${url && ctx.specs.some((s) => s.id === id) ? `[\`${id}\`](${url})` : `\`${id}\` (new)`}`);
-        }
-        lines.push('');
-      }
-      const extra = readdirSync(c.dir).filter((f) => f.endsWith('.md') && !CHANGE_FILES.includes(f)).sort();
-      for (const f of [...CHANGE_FILES, ...extra]) {
-        const file = join(c.dir, f);
-        if (!existsSync(file)) continue;
-        const text = readFileSync(file, 'utf8');
-        // A file with its own title (`# Proposal`) needs no file-name heading.
-        const titled = /^\s*# /.test(frontmatter(text).body);
-        if (!titled) lines.push(`## ${f} {#${f.replace(/\.md$/, '')}}`, '');
-        lines.push(mdBody(text), '');
-      }
-    }
+    lines.push(`<p class="st-kfacts">${cardFacts(c).map(esc).join(' · ')} · <a href="${base}">Board</a></p>`, '');
+    lines.push(...(c.kind === 'idea' ? ideaLines(ctx, c) : changeLines(ctx, c)));
     lines.push(':::', '');
     return lines.join('\n');
   }

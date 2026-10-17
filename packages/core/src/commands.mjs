@@ -40,6 +40,7 @@ async function safe(label, fn) {
 
 // dev(ctx, { port }) builds the site, starts the VitePress dev server, and
 // rebuilds the pages when a file under openspec/ or a plugin folder changes.
+/** @param {any} ctx @param {{ port?: number }} [options] */
 export async function dev(ctx, { port } = {}) {
   const rebuild = serial(() => safe('page build', () => buildSite(ctx)));
   // The site still works with old prepared data (for example old screens).

@@ -13,6 +13,7 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { logger, matchesAny } from '@spectrail/core';
 
 // Change this when the export settings change, so the next run exports again.
@@ -23,9 +24,9 @@ const MARK = 'SCREENS_JSON:';
 
 const log = logger('pen');
 
-export const manifestFile = (outDir) => join(outDir, 'screens.json');
+const manifestFile = (outDir) => join(outDir, 'screens.json');
 
-export function penFiles(designDir) {
+function penFiles(designDir) {
   if (!existsSync(designDir)) return [];
   return readdirSync(designDir).filter((f) => f.endsWith('.pen')).sort();
 }
@@ -57,7 +58,7 @@ export function readManifest(outDir) {
 // penBin(root, cli, dirs) -> the path of the pen CLI script. `cli` (from the
 // plugin options) wins; then the copy in the project; then the copies in
 // `dirs` (the folder of the config file); then the copy next to this package.
-export function penBin(root, cli = null, dirs = []) {
+function penBin(root, cli = null, dirs = []) {
   if (cli) return cli;
   for (const from of [join(root, 'package.json'), ...dirs.map((d) => join(d, 'package.json')), import.meta.url]) {
     try {
@@ -90,12 +91,11 @@ function penEnv() {
   return env;
 }
 
-const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 const redact = (s, env) => (env.PEN_CLI_KEY ? s.split(env.PEN_CLI_KEY).join('<key>') : s);
 
 function checkAuth(bin, env) {
   const res = spawnSync(process.execPath, [bin, 'status'], { env, encoding: 'utf8', timeout: 60_000 });
-  const out = stripAnsi(`${res.stdout || ''}${res.stderr || ''}`);
+  const out = stripVTControlCharacters(`${res.stdout || ''}${res.stderr || ''}`);
   if (/expired|revoked|not logged in|not authenticated|invalid/i.test(out) || res.status !== 0) {
     const status = out.match(/expired \/ revoked|expired|revoked|not logged in|not authenticated|invalid/i)?.[0] || 'unknown';
     console.warn(
@@ -121,7 +121,7 @@ function runPen(bin, path, env, calls) {
     maxBuffer: 64 * 1024 * 1024,
   });
   rmSync(scratch, { force: true });
-  return stripAnsi(`${res.stdout || ''}\n${res.stderr || ''}`);
+  return stripVTControlCharacters(`${res.stdout || ''}\n${res.stderr || ''}`);
 }
 
 // listScreens(bin, path, env, rule) -> [{ id, name, type, width, height }]
@@ -152,8 +152,8 @@ function listScreens(bin, path, env, rule) {
 // About 30 phone screens or 8 web pages at scale 2 fit in one call.
 const BATCH_PIXELS = 10_000_000;
 
-// exportBatches(bin, path, outDir, env, list) exports the screens, batch by batch.
-function exportBatches(bin, path, outDir, env, list) {
+// batchIds(list) -> the screen ids, in groups that fit in one pen call.
+function batchIds(list) {
   const batches = [];
   let cur = [];
   let px = 0;
@@ -170,6 +170,12 @@ function exportBatches(bin, path, outDir, env, list) {
     px += cost;
   }
   if (cur.length) batches.push(cur);
+  return batches;
+}
+
+// exportBatches({ bin, path, outDir, env, list }) exports the screens, batch by batch.
+function exportBatches({ bin, path, outDir, env, list }) {
+  const batches = batchIds(list);
   const calls = batches.map(
     (ids) => `Export(${JSON.stringify(ids)}, "webp", ${JSON.stringify(outDir)}, { scale: ${SCALE}, quality: ${QUALITY} });`,
   );
@@ -178,7 +184,7 @@ function exportBatches(bin, path, outDir, env, list) {
 }
 
 // webpSize(buffer) -> { width, height } from the VP8X / VP8 / VP8L header.
-export function webpSize(buf) {
+function webpSize(buf) {
   const chunk = buf.toString('ascii', 12, 16);
   if (chunk === 'VP8X') {
     return { width: 1 + buf.readUIntLE(24, 3), height: 1 + buf.readUIntLE(27, 3) };
@@ -193,6 +199,50 @@ export function webpSize(buf) {
   throw new Error('not a WebP file');
 }
 
+// screensDir(outDir, file) -> the folder of the screens of one .pen file.
+const screensDir = (outDir, file) => join(outDir, file.replace(/\.pen$/, ''));
+
+// exportFile({ bin, designDir, outDir, env, rule, file }) -> the screens of one .pen file.
+// It writes the images to a temporary folder, checks them, and then moves the folder in place.
+function exportFile({ bin, designDir, outDir, env, rule, file }) {
+  const finalDir = screensDir(outDir, file);
+  const tmpDir = `${finalDir}.tmp`;
+  rmSync(tmpDir, { recursive: true, force: true });
+  mkdirSync(tmpDir, { recursive: true });
+  log(`exporting ${file} ...`);
+  const path = join(designDir, file);
+  const list = listScreens(bin, path, env, rule);
+  const { out, batches } = exportBatches({ bin, path, outDir: tmpDir, env, list });
+
+  // The CLI can fail without a nonzero exit code, so check every file.
+  const missing = list.filter((s) => !existsSync(join(tmpDir, `${s.id}.webp`)));
+  if (missing.length) {
+    throw new Error(
+      `${file}: ${missing.length} screens not exported (${batches} batches): ${missing.map((s) => s.id).join(', ')}\n` +
+        redact(out, env).slice(-2000),
+    );
+  }
+  const screens = list.map((s) => {
+    const { width, height } = webpSize(readFileSync(join(tmpDir, `${s.id}.webp`)));
+    return { file, id: s.id, name: s.name, width: Math.round(width / SCALE), height: Math.round(height / SCALE) };
+  });
+  rmSync(finalDir, { recursive: true, force: true });
+  renameSync(tmpDir, finalDir);
+  log(`exported ${list.length} screens from ${file}`);
+  return screens;
+}
+
+// startPen(root, cli, dirs, needed) -> { bin, env }. It checks the CLI and the auth when a file needs an export.
+function startPen(root, cli, dirs, needed) {
+  const bin = penBin(root, cli, dirs);
+  if (needed && !bin) {
+    throw new Error('The pen CLI is not installed. Run: npm i -D @pen.dev/cli');
+  }
+  const env = penEnv();
+  if (needed) checkAuth(bin, env);
+  return { bin, env };
+}
+
 // exportScreens({ root, designDir, outDir, files, minWidth, include, force }) -> { changed, manifest }
 // `files` are globs of .pen file names; the default skips the `.lib.pen` libraries.
 export function exportScreens({
@@ -205,7 +255,7 @@ export function exportScreens({
   const prints = fingerprints(designDir, files, all, rule);
   const old = readManifest(outDir);
   const stale = files.filter(
-    (f) => force || old.sources?.[f] !== prints[f] || !existsSync(join(outDir, f.replace(/\.pen$/, ''))),
+    (f) => force || old.sources?.[f] !== prints[f] || !existsSync(screensDir(outDir, f)),
   );
   const removed = Object.keys(old.sources || {}).filter((f) => !files.includes(f));
 
@@ -214,48 +264,19 @@ export function exportScreens({
     return { changed: false, manifest: old };
   }
 
-  const bin = penBin(root, cli, dirs);
-  if (stale.length && !bin) {
-    throw new Error('The pen CLI is not installed. Run: npm i -D @pen.dev/cli');
-  }
-  const env = penEnv();
-  if (stale.length) checkAuth(bin, env);
+  const { bin, env } = startPen(root, cli, dirs, stale.length > 0);
   mkdirSync(outDir, { recursive: true });
 
   const sources = { ...(old.sources || {}) };
   let screens = (old.screens || []).filter((s) => files.includes(s.file) && !stale.includes(s.file));
   for (const f of removed) {
     delete sources[f];
-    rmSync(join(outDir, f.replace(/\.pen$/, '')), { recursive: true, force: true });
+    rmSync(screensDir(outDir, f), { recursive: true, force: true });
   }
 
   for (const file of stale) {
-    const finalDir = join(outDir, file.replace(/\.pen$/, ''));
-    const tmpDir = `${finalDir}.tmp`;
-    rmSync(tmpDir, { recursive: true, force: true });
-    mkdirSync(tmpDir, { recursive: true });
-    log(`exporting ${file} ...`);
-    const list = listScreens(bin, join(designDir, file), env, rule);
-    const { out, batches } = exportBatches(bin, join(designDir, file), tmpDir, env, list);
-
-    // The CLI can fail without a nonzero exit code, so check every file.
-    const missing = list.filter((s) => !existsSync(join(tmpDir, `${s.id}.webp`)));
-    if (missing.length) {
-      throw new Error(
-        `${file}: ${missing.length} screens not exported (${batches} batches): ${missing.map((s) => s.id).join(', ')}\n` +
-          redact(out, env).slice(-2000),
-      );
-    }
-    for (const s of list) {
-      const { width, height } = webpSize(readFileSync(join(tmpDir, `${s.id}.webp`)));
-      screens.push({
-        file, id: s.id, name: s.name, width: Math.round(width / SCALE), height: Math.round(height / SCALE),
-      });
-    }
-    rmSync(finalDir, { recursive: true, force: true });
-    renameSync(tmpDir, finalDir);
+    screens.push(...exportFile({ bin, designDir, outDir, env, rule, file }));
     sources[file] = prints[file];
-    log(`exported ${list.length} screens from ${file}`);
   }
 
   // Keep the order of the files and of the screens inside each file.

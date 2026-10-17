@@ -3,7 +3,26 @@ import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const CONFIG_NAMES = ['spectrail.config.mjs', 'spectrail.config.js'];
+const CONFIG_NAMES = ['spectrail.config.mjs', 'spectrail.config.js'];
+
+// findConfig(path) -> the absolute path of the config file. It throws if there is none.
+function findConfig(path) {
+  const file = path ? resolve(path) : CONFIG_NAMES.map((n) => resolve(n)).find((f) => existsSync(f));
+  if (!file || !existsSync(file)) {
+    throw new Error(`No config file. Create ${CONFIG_NAMES[0]} in the project root, or use --config <file>.`);
+  }
+  return file;
+}
+
+// checkPlugins(plugins) throws if a plugin has no name or if a name is in the list two times.
+function checkPlugins(plugins) {
+  const names = new Set();
+  for (const p of plugins) {
+    if (!p.name) throw new Error('A plugin has no name.');
+    if (names.has(p.name)) throw new Error(`The plugin "${p.name}" is in the config two times.`);
+    names.add(p.name);
+  }
+}
 
 // The config file is a module with a default export:
 //   export default {
@@ -16,10 +35,7 @@ export const CONFIG_NAMES = ['spectrail.config.mjs', 'spectrail.config.js'];
 //     plugins: [reader(), pen()],
 //   };
 export async function loadConfig(path) {
-  const file = path ? resolve(path) : CONFIG_NAMES.map((n) => resolve(n)).find((f) => existsSync(f));
-  if (!file || !existsSync(file)) {
-    throw new Error(`No config file. Create ${CONFIG_NAMES[0]} in the project root, or use --config <file>.`);
-  }
+  const file = findConfig(path);
   const mod = await import(pathToFileURL(file).href);
   const raw = typeof mod.default === 'function' ? await mod.default() : mod.default;
   if (!raw || typeof raw !== 'object') throw new Error(`${file} has no default export.`);
@@ -30,13 +46,7 @@ export async function loadConfig(path) {
   const openspecDir = abs(raw.openspecDir || 'openspec', root);
   const workDir = abs(raw.workDir || '.spectrail', root);
   const plugins = (raw.plugins || []).flat().filter(Boolean);
-
-  const names = new Set();
-  for (const p of plugins) {
-    if (!p.name) throw new Error('A plugin has no name.');
-    if (names.has(p.name)) throw new Error(`The plugin "${p.name}" is in the config two times.`);
-    names.add(p.name);
-  }
+  checkPlugins(plugins);
 
   return {
     file,

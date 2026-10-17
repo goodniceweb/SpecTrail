@@ -10,7 +10,7 @@ const run = promisify(execFile);
 
 // openspecBin(root) -> [command, ...args] that starts the OpenSpec CLI.
 // It prefers the copy in the project, then an `openspec` on the PATH.
-export function openspecBin(root) {
+function openspecBin(root) {
   try {
     const req = createRequire(join(root, 'package.json'));
     const pkgFile = req.resolve('@fission-ai/openspec/package.json');

@@ -9,8 +9,26 @@
     "node": ">=22.19"
   },
   "scripts": {
-    "example:dev": "spectrail dev --config examples/ostrivia.config.mjs",
-    "example:build": "spectrail build --config examples/ostrivia.config.mjs",
-    "example:check": "spectrail check --config examples/ostrivia.config.mjs"
+    "example:dev": "spectrail dev --config examples/basic/spectrail.config.mjs",
+    "example:build": "spectrail build --config examples/basic/spectrail.config.mjs",
+    "example:check": "spectrail check --config examples/basic/spectrail.config.mjs",
+    "ostrivia:dev": "spectrail dev --config examples/ostrivia.config.mjs",
+    "ostrivia:check": "spectrail check --config examples/ostrivia.config.mjs",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "lint": "eslint . && knip && npm run lint:packages",
+    "lint:packages": "npm exec --workspaces -- publint --strict",
+    "typecheck": "tsc -p jsconfig.json",
+    "set-version": "node scripts/set-version.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@fission-ai/openspec": "^1.14.3",
+    "@types/node": "^22.20.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^17.13.0",
+    "knip": "^6.41.0",
+    "publint": "^0.3.25",
+    "typescript": "^7.0.2"
   }
 }

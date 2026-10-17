@@ -39,9 +39,9 @@ lists `@pen.dev/cli` as an optional peer dependency.
    - `npx spectrail check`: run the plugin checks. An error gives exit code 1, for CI.
    - `npx spectrail prepare`: do only the slow steps, for example the screen export.
 
-### Before the first npm release
+### Use a local checkout
 
-spectrail is not on npm yet. A project can link a local checkout:
+To try a change in spectrail before a release, link the local checkout:
 
 ```sh
 npm i -D file:../spectrail/packages/spectrail
@@ -50,10 +50,6 @@ npm i -D file:../spectrail/packages/spectrail
 The path is relative to the project. Run `npm install` in the spectrail checkout first.
 VitePress and Vue then sit in the spectrail checkout, not in the project, so the core
 links them into `.spectrail/site/node_modules/`.
-
-If CI runs `npm ci` in the project root, do not add the link there: CI has no
-spectrail checkout. Give spectrail its own folder with its own `package.json`
-instead, as Ostrivia does in `spectrail/`, and call it with `npm --prefix spectrail`.
 
 ## Spec pages (reader plugin)
 
@@ -164,8 +160,21 @@ The full list is in `packages/core/src/index.mjs`. In short:
 
 ```sh
 npm install
-OSTRIVIA_ROOT=/path/to/ostrivia_monorepo npm run example:dev
+npm run example:dev     # serve the sample project in examples/basic/
+npm test                # unit tests and a build of the sample project
+npm run lint            # ESLint, knip, and publint
+npm run typecheck       # TypeScript checks the JavaScript (checkJs)
 ```
 
-`examples/ostrivia.config.mjs` is a trial config for the Ostrivia monorepo.
-It writes the site into `.example-build/`, so the Ostrivia working tree does not change.
+CI runs `lint`, `typecheck`, and `test` on each pull request.
+ESLint limits the complexity of a function to 15. If a function is more complex,
+split it into smaller functions. Do not turn off the rule.
+
+`examples/basic/` is a small todo app: two specs, one active change, one idea, and a
+dictionary. `examples/ostrivia.config.mjs` is a trial config for a large project
+(`OSTRIVIA_ROOT=/path/to/ostrivia_monorepo npm run ostrivia:dev`). It writes the site
+into `.example-build/`, so the other project does not change.
+
+## License
+
+MIT

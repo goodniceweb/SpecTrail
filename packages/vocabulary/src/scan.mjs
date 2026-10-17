@@ -17,7 +17,7 @@ function maskInline(line, { quotes = true } = {}) {
 }
 
 // markdownProse(text) -> lines with only the prose left.
-export function markdownProse(text, opts = {}) {
+function markdownProse(text, opts = {}) {
   const lines = text.split('\n');
   const out = [];
   let inFence = false;
@@ -113,79 +113,86 @@ const LANGS = {
 export const CODE_EXTS = Object.keys(LANGS);
 export const PROSE_EXTS = ['md', 'markdown', 'mdx'];
 
-// codeComments(text, lang) -> lines with only the comment text left.
-export function codeComments(text, lang) {
-  const out = [];
-  let mode = null; // null | { string: q } | { block: end } | 'line' | 'doc'
-  let cur = '';
-  const push = () => {
-    out.push(cur);
-    cur = '';
-  };
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === '\n') {
-      if (mode === 'line') mode = null;
-      push();
-      continue;
-    }
-    if (mode === 'line' || mode === 'doc' || mode?.block) {
-      if (mode === 'doc' && text.startsWith('"""', i)) {
-        cur += '   ';
-        i += 2;
-        mode = null;
-        continue;
-      }
-      if (mode?.block && text.startsWith(mode.block, i)) {
-        cur += ' '.repeat(mode.block.length);
-        i += mode.block.length - 1;
-        mode = null;
-        continue;
-      }
-      cur += ch;
-      continue;
-    }
-    if (mode?.string) {
-      if (ch === '\\') {
-        cur += '  ';
-        i += 1;
-        if (text[i] === '\n') push();
-        continue;
-      }
-      if (ch === mode.string) mode = null;
-      cur += ' ';
-      continue;
-    }
-    if (lang.docs && /@(module)?doc\s+"""$/.test(text.slice(Math.max(0, i - 20), i + 3))) {
-      cur += '   ';
-      i += 2;
-      mode = 'doc';
-      continue;
-    }
-    const block = lang.block.find(([open]) => text.startsWith(open, i));
-    if (block) {
-      cur += ' '.repeat(block[0].length);
-      i += block[0].length - 1;
-      mode = { block: block[1] };
-      continue;
-    }
-    const line = lang.line.find((open) => text.startsWith(open, i));
-    if (line) {
-      cur += ' '.repeat(line.length);
-      i += line.length - 1;
-      mode = 'line';
-      continue;
-    }
-    if (lang.strings.includes(ch)) {
-      mode = { string: ch };
-      cur += ' ';
-      continue;
-    }
-    cur += ' ';
+// pushLine(st) ends the current output line.
+function pushLine(st) {
+  st.out.push(st.cur);
+  st.cur = '';
+}
+
+// skipToken(st, n) blanks a token of n characters and moves past it.
+function skipToken(st, n) {
+  st.cur += ' '.repeat(n);
+  st.i += n - 1;
+}
+
+// commentStep(st, ch) -> true if the character is inside a comment (it keeps the text).
+function commentStep(st, ch) {
+  const { mode, text, i } = st;
+  if (!(mode === 'line' || mode === 'doc' || mode?.block)) return false;
+  if (mode === 'doc' && text.startsWith('"""', i)) {
+    skipToken(st, 3);
+    st.mode = null;
+  } else if (mode?.block && text.startsWith(mode.block, i)) {
+    skipToken(st, mode.block.length);
+    st.mode = null;
+  } else {
+    st.cur += ch;
   }
-  push();
+  return true;
+}
+
+// stringStep(st, ch) -> true if the character is inside a string (it blanks the text).
+function stringStep(st, ch) {
+  if (!st.mode?.string) return false;
+  if (ch === '\\') {
+    st.cur += '  ';
+    st.i += 1;
+    if (st.text[st.i] === '\n') pushLine(st);
+    return true;
+  }
+  if (ch === st.mode.string) st.mode = null;
+  st.cur += ' ';
+  return true;
+}
+
+// openStep(st, ch) handles a character outside comments and strings: it can start a comment or a string.
+function openStep(st, ch) {
+  const { text, lang, i } = st;
+  if (lang.docs && /@(module)?doc\s+"""$/.test(text.slice(Math.max(0, i - 20), i + 3))) {
+    skipToken(st, 3);
+    st.mode = 'doc';
+    return;
+  }
+  const block = lang.block.find(([open]) => text.startsWith(open, i));
+  const line = lang.line.find((open) => text.startsWith(open, i));
+  if (block) {
+    skipToken(st, block[0].length);
+    st.mode = { block: block[1] };
+  } else if (line) {
+    skipToken(st, line.length);
+    st.mode = 'line';
+  } else {
+    if (lang.strings.includes(ch)) st.mode = { string: ch };
+    st.cur += ' ';
+  }
+}
+
+// codeComments(text, lang) -> lines with only the comment text left.
+function codeComments(text, lang) {
+  // mode: null | { string: q } | { block: end } | 'line' | 'doc'
+  const st = { text, lang, i: 0, mode: null, cur: '', out: [] };
+  for (; st.i < text.length; st.i += 1) {
+    const ch = text[st.i];
+    if (ch === '\n') {
+      if (st.mode === 'line') st.mode = null;
+      pushLine(st);
+    } else if (!commentStep(st, ch) && !stringStep(st, ch)) {
+      openStep(st, ch);
+    }
+  }
+  pushLine(st);
   // Inside comments, code spans and URLs are not prose either.
-  return out.map((l) => maskInline(l, { quotes: false }));
+  return st.out.map((l) => maskInline(l, { quotes: false }));
 }
 
 // proseOf(file, text, opts) -> lines of prose, or null when the file type is unknown.
@@ -209,15 +216,13 @@ function phraseRe(word) {
 }
 
 // approvedTerms(dict) -> the entry terms and the phrases of the "Write instead" column.
-export function approvedTerms(dict) {
+function approvedTerms(dict) {
   const terms = dict.sections.flatMap((s) => s.entries.map((e) => e.term));
   const instead = dict.tables.flatMap((t) => t.rows.flatMap((r) => r.instead.split(/,|\s\/\s/)));
   return [...new Set([...terms, ...instead].flatMap((t) => t.split(/\s+\/\s+/))
     .map((t) => t.replace(/\([^)]*\)/g, '').replace(/^(the|a|an)\s+/i, '').replace(/\.\.\.|…/g, '').trim())
     .filter(Boolean))];
 }
-
-export { phraseRe };
 
 // makeMatcher(dictionary) -> (line) -> [{ rule, index, length }]
 // A match inside an approved term ("hand sheet" for "sheet") does not count.

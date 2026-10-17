@@ -75,7 +75,7 @@ export function reader(options = {}) {
     },
 
     pages(ctx) {
-      const pages = [{ path: `${base.slice(1)}index.md`, content: indexPage(ctx, base) }];
+      const pages = [{ path: `${base.slice(1)}index.md`, content: indexPage(ctx) }];
       for (const spec of ctx.specs) {
         pages.push({ path: `${base.slice(1)}${spec.id}/index.md`, content: renderSpec(spec, ctx) });
       }
@@ -83,7 +83,7 @@ export function reader(options = {}) {
       const addAreas = (node) => {
         for (const child of node.children.values()) {
           if (child.children.size > 0 && !child.isCap) {
-            pages.push({ path: `${base.slice(1)}${child.path}/index.md`, content: areaPage(child, ctx, base) });
+            pages.push({ path: `${base.slice(1)}${child.path}/index.md`, content: areaPage(child, ctx) });
           }
           addAreas(child);
         }
@@ -189,81 +189,84 @@ export function inline(line, ctx) {
 
 // --- spec page ----------------------------------------------------------------
 
+// flushReq(st, spec, ctx) writes the requirement blocks once, if they are pending.
+function flushReq(st, spec, ctx) {
+  if (!st.reqPending) return;
+  st.reqPending = false;
+  const html = ctx.call('reader:requirement', { spec, req: st.req }).join('');
+  if (html) st.out.push('', html, '');
+}
+
+// flushScenario(st, spec, ctx) writes the coverage and the blocks of the open scenario.
+function flushScenario(st, spec, ctx) {
+  if (!st.scen) return;
+  const html = [coverageHtml(spec, st.req, st.scen, ctx), ...ctx.call('reader:scenario', { spec, req: st.req, scen: st.scen })].join('');
+  if (html) st.out.push('', html, '');
+  st.scen = null;
+}
+
+// reqBadge(spec, req, ctx) -> the lines of the coverage badge of a requirement.
+function reqBadge(spec, req, ctx) {
+  const { total, covered } = reqCoverage(spec, req, ctx);
+  const cls = total === 0 ? 'none' : covered === total ? 'full' : 'part';
+  return ['', `<div class="req-badge req-${cls}">${covered}/${total} scenarios covered</div>`, ''];
+}
+
+// openRequirement(line, st, spec, ctx) -> true if the line starts a requirement.
+function openRequirement(line, st, spec, ctx) {
+  if (!/^### Requirement:\s*(.+)$/.test(line)) return false;
+  st.reqIdx += 1;
+  st.scenIdx = -1;
+  st.req = spec.requirements[st.reqIdx];
+  st.reqPending = true;
+  st.out.push(`### Requirement: ${inline(st.req.name, ctx)} {#${st.req.slug}}`);
+  if (ctx.data.reader.coverage) st.out.push(...reqBadge(spec, st.req, ctx));
+  return true;
+}
+
+// openScenario(line, st, ctx) -> true if the line starts a scenario of the open requirement.
+function openScenario(line, st, ctx) {
+  if (!/^#### Scenario:\s*(.+)$/.test(line) || !st.req) return false;
+  st.scenIdx += 1;
+  st.scen = st.req.scenarios[st.scenIdx];
+  st.out.push(`#### Scenario: ${inline(st.scen.name, ctx)} {#${scenAnchor(st.req.slug, st.scen.slug)}}`);
+  return true;
+}
+
+// renderLine(raw, st, spec, ctx) writes one line of spec text to st.out.
+function renderLine(raw, st, spec, ctx) {
+  const line = raw.trimEnd();
+  const fence = /^\s*(```|~~~)/.test(line);
+  if (fence) st.inFence = !st.inFence;
+  if (fence || st.inFence) {
+    st.out.push(line);
+    return;
+  }
+  if (st.req && ctx.call('reader:hideLine', line, { spec, req: st.req }).length) {
+    if (!st.scen) flushReq(st, spec, ctx);
+    return;
+  }
+  if (COMMENT_LINE.test(line)) return;
+  if (/^#{1,6}\s/.test(line)) {
+    flushScenario(st, spec, ctx);
+    if (/^#### Scenario:/.test(line) || /^#{1,3}\s/.test(line)) flushReq(st, spec, ctx);
+  }
+  if (openRequirement(line, st, spec, ctx) || openScenario(line, st, ctx)) return;
+  if (/^#{1,2}\s/.test(line)) st.req = null;
+  st.out.push(inline(line, ctx));
+}
+
 // renderSpec(spec, ctx) -> page markdown. It walks the same headings as the
 // core parser and matches them to the parsed requirements by order.
 function renderSpec(spec, ctx) {
-  const out = [];
-  let reqIdx = -1;
-  let scenIdx = -1;
-  let req = null;
-  let scen = null;
-  let inFence = false;
-  let reqPending = false; // the requirement blocks are not written yet
-
-  const flushReq = () => {
-    if (!reqPending) return;
-    reqPending = false;
-    const html = ctx.call('reader:requirement', { spec, req }).join('');
-    if (html) out.push('', html, '');
-  };
-  const flushScenario = () => {
-    if (!scen) return;
-    const html = [coverageHtml(spec, req, scen, ctx), ...ctx.call('reader:scenario', { spec, req, scen })].join('');
-    if (html) out.push('', html, '');
-    scen = null;
-  };
-
-  for (const raw of spec.text.split('\n')) {
-    const line = raw.trimEnd();
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence;
-      out.push(line);
-      continue;
-    }
-    if (inFence) {
-      out.push(line);
-      continue;
-    }
-
-    if (req && ctx.call('reader:hideLine', line, { spec, req }).length) {
-      if (!scen) flushReq();
-      continue;
-    }
-    if (COMMENT_LINE.test(line)) continue;
-
-    if (/^#{1,6}\s/.test(line)) {
-      flushScenario();
-      if (/^#### Scenario:/.test(line) || /^#{1,3}\s/.test(line)) flushReq();
-    }
-
-    if (/^### Requirement:\s*(.+)$/.test(line)) {
-      reqIdx += 1;
-      scenIdx = -1;
-      req = spec.requirements[reqIdx];
-      reqPending = true;
-      out.push(`### Requirement: ${inline(req.name, ctx)} {#${req.slug}}`);
-      if (ctx.data.reader.coverage) {
-        const { total, covered } = reqCoverage(spec, req, ctx);
-        const cls = total === 0 ? 'none' : covered === total ? 'full' : 'part';
-        out.push('', `<div class="req-badge req-${cls}">${covered}/${total} scenarios covered</div>`, '');
-      }
-      continue;
-    }
-    if (/^#### Scenario:\s*(.+)$/.test(line) && req) {
-      scenIdx += 1;
-      scen = req.scenarios[scenIdx];
-      out.push(`#### Scenario: ${inline(scen.name, ctx)} {#${scenAnchor(req.slug, scen.slug)}}`);
-      continue;
-    }
-    if (/^#{1,2}\s/.test(line)) req = null;
-    out.push(inline(line, ctx));
-  }
-  flushScenario();
-  flushReq();
+  const st = { out: [], reqIdx: -1, scenIdx: -1, req: null, scen: null, inFence: false, reqPending: false };
+  for (const raw of spec.text.split('\n')) renderLine(raw, st, spec, ctx);
+  flushScenario(st, spec, ctx);
+  flushReq(st, spec, ctx);
 
   const reqs = spec.requirements.map((r) => [r.slug, r.name.replace(/`/g, '')]);
   const front = ['---', `title: ${JSON.stringify(spec.id)}`, ...treeFront(spec.id), `stReqs: ${JSON.stringify(reqs)}`, '---', ''];
-  return [...front, '::: v-pre', ...out, '', ':::', ''].join('\n');
+  return [...front, '::: v-pre', ...st.out, '', ':::', ''].join('\n');
 }
 
 // --- tree, sidebar, index pages ----------------------------------------------

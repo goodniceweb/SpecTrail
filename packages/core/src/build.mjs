@@ -74,15 +74,8 @@ function siteConfig(ctx, nav, sidebar) {
   };
 }
 
-// buildSite(ctx) -> { pages, changed }
-export async function buildSite(ctx) {
-  const { config } = ctx;
-  const siteDir = config.siteDir;
-  await ctx.refresh();
-  ctx.data = {};
-  await eachPlugin(ctx, 'setup');
-  await eachPlugin(ctx, 'load');
-
+// collectPages(ctx) -> Map of page path to content, from the cards and the pages of the plugins.
+async function collectPages(ctx) {
   const pages = new Map();
   const cards = (await eachPlugin(ctx, 'cards')).flatMap((r) => r.result || []);
   pages.set('index.md', dashboardPage(ctx, cards));
@@ -92,7 +85,11 @@ export async function buildSite(ctx) {
       pages.set(page.path, page.content);
     }
   }
+  return pages;
+}
 
+// writePages(siteDir, pages) -> the number of pages written or removed.
+function writePages(siteDir, pages) {
   let changed = 0;
   for (const [rel, content] of pages) if (writeIfChanged(join(siteDir, rel), content)) changed += 1;
 
@@ -106,11 +103,13 @@ export async function buildSite(ctx) {
       changed += 1;
     }
   }
+  return changed;
+}
 
-  // Theme: the default VitePress theme plus one stylesheet for the core and for each plugin.
+// writeStyles(plugins, themeDir) -> the import lines for one stylesheet of the core and of each plugin.
+function writeStyles(plugins, themeDir) {
   const styles = [['core', CORE_CSS]];
-  for (const p of config.plugins) for (const s of p.styles || []) styles.push([p.name, s]);
-  const themeDir = join(siteDir, '.vitepress', 'theme');
+  for (const p of plugins) for (const s of p.styles || []) styles.push([p.name, s]);
   const imports = styles.map(([name, file], i) => {
     const target = `${name}-${i}.css`;
     writeIfChanged(join(themeDir, target), readFileSync(file, 'utf8'));
@@ -119,11 +118,11 @@ export async function buildSite(ctx) {
   for (const f of listFiles(themeDir, (f) => f === join(themeDir, 'plugins'))) {
     if (f.endsWith('.css') && !styles.some(([name], i) => f.endsWith(`${name}-${i}.css`))) rmSync(f);
   }
+  return imports;
+}
 
-  // Browser code: a plugin `client` folder goes to theme/plugins/<name>/. Its
-  // index.js default export is called as enhanceApp({ app, router, siteData }).
-  const clients = config.plugins.filter((p) => p.client);
-  const pluginsDir = join(themeDir, 'plugins');
+// writeClients(clients, pluginsDir) copies the browser code of the plugins and removes old copies.
+function writeClients(clients, pluginsDir) {
   for (const p of clients) {
     const to = join(pluginsDir, p.name);
     for (const src of listFiles(p.client)) writeIfChanged(join(to, relative(p.client, src)), readFileSync(src, 'utf8'));
@@ -132,38 +131,54 @@ export async function buildSite(ctx) {
   for (const f of listFiles(pluginsDir)) {
     if (!clients.some((p) => f.startsWith(join(pluginsDir, p.name) + sep))) rmSync(f);
   }
+}
+
+// themeIndex(imports, clients) -> the source of theme/index.js.
+function themeIndex(imports, clients) {
+  const clientImports = clients.map((p, i) => `import * as client${i} from './plugins/${p.name}/index.js';`);
+  const modules = clients.map((_p, i) => `client${i}`).join(', ');
+  return [
+    "import { h } from 'vue';",
+    "import DefaultTheme from 'vitepress/theme';",
+    ...imports,
+    ...clientImports,
+    '',
+    '// Two plugins can fill one slot: both components render, in config order.',
+    'const slots = {};',
+    `for (const mod of [${modules}]) {`,
+    '  for (const [name, c] of Object.entries(mod.slots || {})) (slots[name] ||= []).push(c);',
+    '}',
+    '',
+    'export default {',
+    '  extends: DefaultTheme,',
+    '  Layout() {',
+    '    return h(DefaultTheme.Layout, null, Object.fromEntries(Object.entries(slots).map(([name, cs]) => [name, () => cs.map((c) => h(c))])));',
+    '  },',
+    '  enhanceApp(ctx) {',
+    '    // In a loop, so Rollup does not warn when a client has no default export.',
+    `    for (const mod of [${modules}]) if (typeof mod.default === 'function') mod.default(ctx);`,
+    '  },',
+    '};',
+    '',
+  ].join('\n');
+}
+
+// writeTheme(config, siteDir) writes the default VitePress theme with the styles and the browser code.
+function writeTheme(config, siteDir) {
+  const themeDir = join(siteDir, '.vitepress', 'theme');
+  const imports = writeStyles(config.plugins, themeDir);
+  // Browser code: a plugin `client` folder goes to theme/plugins/<name>/. Its
+  // index.js default export is called as enhanceApp({ app, router, siteData }).
+  const clients = config.plugins.filter((p) => p.client);
+  writeClients(clients, join(themeDir, 'plugins'));
   // A client module can also export `slots`: { slotName: Component } for the
   // default theme layout (for example 'aside-outline-before').
-  const clientImports = clients.map((p, i) => `import * as client${i} from './plugins/${p.name}/index.js';`);
-  const enhance = clients.map((_p, i) => `    client${i}.default?.(ctx);`);
-  const modules = clients.map((_p, i) => `client${i}`).join(', ');
-  writeIfChanged(
-    join(themeDir, 'index.js'),
-    [
-      "import { h } from 'vue';",
-      "import DefaultTheme from 'vitepress/theme';",
-      ...imports,
-      ...clientImports,
-      '',
-      '// Two plugins can fill one slot: both components render, in config order.',
-      'const slots = {};',
-      `for (const mod of [${modules}]) {`,
-      '  for (const [name, c] of Object.entries(mod.slots || {})) (slots[name] ||= []).push(c);',
-      '}',
-      '',
-      'export default {',
-      '  extends: DefaultTheme,',
-      '  Layout() {',
-      '    return h(DefaultTheme.Layout, null, Object.fromEntries(Object.entries(slots).map(([name, cs]) => [name, () => cs.map((c) => h(c))])));',
-      '  },',
-      '  enhanceApp(ctx) {',
-      ...enhance,
-      '  },',
-      '};',
-      '',
-    ].join('\n'),
-  );
+  writeIfChanged(join(themeDir, 'index.js'), themeIndex(imports, clients));
+}
 
+// writeSiteConfig(ctx) writes the VitePress config from the nav, the sidebar and the themeConfig of the plugins.
+async function writeSiteConfig(ctx) {
+  const siteDir = ctx.config.siteDir;
   const nav = [{ text: 'Dashboard', link: '/' }];
   const sidebar = [{ text: 'Dashboard', link: '/' }];
   for (const { result } of await eachPlugin(ctx, 'nav')) nav.push(...(result || []));
@@ -185,8 +200,10 @@ export async function buildSite(ctx) {
       '',
     ].join('\n'),
   );
+}
 
-  // Static files: each plugin names folders to copy into public/<to>.
+// writePublic(ctx, siteDir) copies the static folders of the plugins and removes old files.
+async function writePublic(ctx, siteDir) {
   const publicDir = join(siteDir, 'public');
   const dirs = (await eachPlugin(ctx, 'publicDirs')).flatMap((r) => r.result || []);
   for (const d of dirs) syncDir(d.from, join(publicDir, d.to), d.match);
@@ -194,7 +211,21 @@ export async function buildSite(ctx) {
     const rel = relative(publicDir, f);
     if (!dirs.some((d) => rel.startsWith(`${d.to}/`))) rmSync(f);
   }
+}
 
+// buildSite(ctx) -> { pages, changed }
+export async function buildSite(ctx) {
+  const siteDir = ctx.config.siteDir;
+  await ctx.refresh();
+  ctx.data = {};
+  await eachPlugin(ctx, 'setup');
+  await eachPlugin(ctx, 'load');
+
+  const pages = await collectPages(ctx);
+  const changed = writePages(siteDir, pages);
+  writeTheme(ctx.config, siteDir);
+  await writeSiteConfig(ctx);
+  await writePublic(ctx, siteDir);
   linkVitepress(siteDir);
   ctx.log(`${pages.size} pages (${changed} changed)`);
   return { pages: pages.size, changed };
