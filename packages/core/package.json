@@ -2,8 +2,26 @@
   "name": "@spectrail/core",
   "version": "0.1.0",
   "description": "A local web dashboard for an OpenSpec repo, with a plugin API.",
+  "keywords": [
+    "openspec",
+    "spectrail",
+    "spec-driven-development",
+    "dashboard",
+    "cli",
+    "vitepress"
+  ],
   "type": "module",
   "license": "MIT",
+  "author": "Oleksii Cherkashyn <goodniceweb@gmail.com>",
+  "homepage": "https://github.com/goodniceweb/spectrail/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodniceweb/spectrail.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/goodniceweb/spectrail/issues"
+  },
   "bin": {
     "spectrail": "bin/spectrail.mjs"
   },
@@ -24,5 +42,8 @@
   },
   "peerDependencies": {
     "@fission-ai/openspec": ">=1.14.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

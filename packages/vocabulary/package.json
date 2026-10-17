@@ -2,16 +2,40 @@
   "name": "@spectrail/vocabulary",
   "version": "0.1.0",
   "description": "The project dictionary: approved terms, banned synonyms, and checks.",
+  "keywords": [
+    "openspec",
+    "spectrail",
+    "spec-driven-development",
+    "dictionary",
+    "glossary",
+    "ddd",
+    "lint"
+  ],
   "type": "module",
   "license": "MIT",
+  "author": "Oleksii Cherkashyn <goodniceweb@gmail.com>",
+  "homepage": "https://github.com/goodniceweb/spectrail/tree/main/packages/vocabulary#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodniceweb/spectrail.git",
+    "directory": "packages/vocabulary"
+  },
+  "bugs": {
+    "url": "https://github.com/goodniceweb/spectrail/issues"
+  },
   "exports": {
     ".": "./src/index.mjs"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "engines": {
     "node": ">=22.19"
   },
   "peerDependencies": {
     "@spectrail/core": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

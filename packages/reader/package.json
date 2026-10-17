@@ -2,16 +2,38 @@
   "name": "@spectrail/reader",
   "version": "0.1.0",
   "description": "The spec pages: every OpenSpec capability as a page, with links and test coverage.",
+  "keywords": [
+    "openspec",
+    "spectrail",
+    "spec-driven-development",
+    "specs",
+    "coverage"
+  ],
   "type": "module",
   "license": "MIT",
+  "author": "Oleksii Cherkashyn <goodniceweb@gmail.com>",
+  "homepage": "https://github.com/goodniceweb/spectrail/tree/main/packages/reader#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodniceweb/spectrail.git",
+    "directory": "packages/reader"
+  },
+  "bugs": {
+    "url": "https://github.com/goodniceweb/spectrail/issues"
+  },
   "exports": {
     ".": "./src/index.mjs"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "engines": {
     "node": ">=22.19"
   },
   "peerDependencies": {
     "@spectrail/core": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

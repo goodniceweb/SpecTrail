@@ -2,8 +2,26 @@
   "name": "@spectrail/pen",
   "version": "0.1.0",
   "description": "The pen.dev screens in the specs, and the gaps between screens and specs.",
+  "keywords": [
+    "openspec",
+    "spectrail",
+    "spec-driven-development",
+    "pen.dev",
+    "design",
+    "screens"
+  ],
   "type": "module",
   "license": "MIT",
+  "author": "Oleksii Cherkashyn <goodniceweb@gmail.com>",
+  "homepage": "https://github.com/goodniceweb/spectrail/tree/main/packages/pen#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodniceweb/spectrail.git",
+    "directory": "packages/pen"
+  },
+  "bugs": {
+    "url": "https://github.com/goodniceweb/spectrail/issues"
+  },
   "exports": {
     ".": "./src/index.mjs"
   },
@@ -21,5 +39,8 @@
     "@pen.dev/cli": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -2,15 +2,36 @@
   "name": "spectrail",
   "version": "0.1.0",
   "description": "All spectrail packages in one install: the dashboard, spec pages, pen screens, vocabulary, and kanban.",
+  "keywords": [
+    "openspec",
+    "spectrail",
+    "spec-driven-development",
+    "dashboard",
+    "vitepress",
+    "specs"
+  ],
   "type": "module",
   "license": "MIT",
+  "author": "Oleksii Cherkashyn <goodniceweb@gmail.com>",
+  "homepage": "https://github.com/goodniceweb/spectrail/tree/main/packages/spectrail#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goodniceweb/spectrail.git",
+    "directory": "packages/spectrail"
+  },
+  "bugs": {
+    "url": "https://github.com/goodniceweb/spectrail/issues"
+  },
   "bin": {
     "spectrail": "bin/spectrail.mjs"
   },
   "exports": {
     ".": "./index.mjs"
   },
-  "files": ["bin", "index.mjs"],
+  "files": [
+    "bin",
+    "index.mjs"
+  ],
   "engines": {
     "node": ">=22.19"
   },
